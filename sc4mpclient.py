@@ -1626,7 +1626,7 @@ class Server:
 	def is_saved_address(self) -> bool:
 		"""Whether the server is at the address its database entry was saved for (or has no entry yet). The saved password, user ID and token are only used automatically there."""
 
-		entry = sc4mp_servers_database.get(self.server_id)
+		entry = sc4mp_servers_database.get(self.server_id, None)
 		if not entry or "host" not in entry:
 			return True
 		return (str(entry["host"]), str(entry.get("port"))) == (str(self.host), str(self.port))

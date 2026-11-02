@@ -8130,6 +8130,8 @@ class Logger:
 			self.terminal.reconfigure(errors="replace")	# characters the console can't show (eg. emoji on a cp1252 console) are printed as "?"
 		self.log = Path(SC4MP_LOG_PATH)
 		self.log.unlink(missing_ok=True)
+		self.lock = th.Lock()
+		self.lines = {}
 
 
 	def write(self, message):
@@ -8176,17 +8178,33 @@ class Logger:
 			# Assemble
 			output = color + timestamp + label + type + message
 
-		# Print
-		if self.terminal is not None:
-			self.terminal.write(output)
-		with open(self.log, "a", encoding="utf-8") as log:
-			log.write(output)
-			log.close()  
+		# Hold the text until its line ends, so lines from other threads don't run into it
+		thread = th.current_thread()
+		output = self.lines.pop(thread, "") + output
+		if not output.endswith("\n"):
+			self.lines[thread] = output
+			return
+
+		self.print(output)
 
 
 	def flush(self):
 		
+		output = self.lines.pop(th.current_thread(), "")
+		if len(output) > 0:
+			self.print(output)
+
 		self.terminal.flush()
+
+
+	def print(self, output):
+
+		with self.lock:
+			if self.terminal is not None:
+				self.terminal.write(output)
+			with open(self.log, "a", encoding="utf-8") as log:
+				log.write(output)
+				log.close()
 
 
 # Main

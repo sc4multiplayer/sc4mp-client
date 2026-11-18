@@ -10,7 +10,8 @@
 # "Custom installation path" to the full path of this script.
 #
 # Configure it with environment variables, or put the same `KEY=value` lines in
-# ~/.config/sc4mp/simcity4-wine.conf (that file is sourced if it exists):
+# ~/.config/sc4mp/simcity4-wine.conf or a simcity4-wine.conf next to this script
+# (both are sourced if they exist; the one next to the script wins):
 #
 #   LAUNCH_MODE     "wine" (default) runs SC4_EXE with plain Wine. Use this for
 #                   DRM-free copies (GOG, disc).
@@ -31,11 +32,17 @@
 
 set -euo pipefail
 
+# Settings come from ~/.config/sc4mp/simcity4-wine.conf, then from a
+# simcity4-wine.conf next to this script (which wins if both set something)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sc4mp/simcity4-wine.conf"
-if [[ -f "$CONFIG_FILE" ]]; then
-	# shellcheck disable=SC1090
-	source "$CONFIG_FILE"
-fi
+for conf in "$CONFIG_FILE" "$SCRIPT_DIR/simcity4-wine.conf"; do
+	if [[ -f "$conf" ]]; then
+		echo "simcity4-wine: using $conf"
+		# shellcheck disable=SC1090
+		source "$conf"
+	fi
+done
 
 export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
 WINE="${WINE:-wine}"

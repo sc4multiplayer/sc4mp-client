@@ -815,7 +815,7 @@ def start_sc4():
 
 	# Arguments set based on config settings
 	arguments = [str(path.absolute()),  # absolute, since the game is started from its own folder
-			  f'-UserDir:"{SC4MP_LAUNCHPATH}{os.sep}"', # add trailing slash here because SC4 expects it
+			  f'-UserDir:"{Path(SC4MP_LAUNCHPATH).absolute()}{os.sep}"', # absolute, since the game is started from its own folder; add trailing slash here because SC4 expects it
 			  '-intro:off',
 			  '-CustomResolution:enabled',
 			  f'-r{resw}x{resh}x32',
@@ -3266,7 +3266,7 @@ class ServerLoader(th.Thread):
 		toplevel_plugins_checksums = []
 		try:
 			installation_plugins_path = get_sc4_path().parent.parent / "Plugins"
-			for file_name in os.listdir(installation_plugins_path):
+			for file_name in (os.listdir(installation_plugins_path) if installation_plugins_path.is_dir() else []):	# not there on Linux, where the "installation" is a launch script
 				file_path = installation_plugins_path / file_name
 				if file_path.is_file():
 					toplevel_plugins_checksums.append(md5(file_path))

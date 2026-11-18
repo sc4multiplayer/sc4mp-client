@@ -12,7 +12,13 @@
 # Configure it with environment variables, or put the same `KEY=value` lines in
 # ~/.config/sc4mp/simcity4-wine.conf (that file is sourced if it exists):
 #
-#   SC4_EXE         Windows path to "SimCity 4.exe" inside the prefix (required),
+#   LAUNCH_MODE     "wine" (default) runs SC4_EXE with plain Wine. Use this for
+#                   DRM-free copies (GOG, disc).
+#                   "steam" launches through Steam (`steam -applaunch 24780`), so
+#                   the Steam copy runs under Proton. Use this if you get
+#                   "Application load error 5:0000065434". Steam must be running.
+#                   Set gamescope etc. in the game's Steam launch options instead.
+#   SC4_EXE         Windows path to "SimCity 4.exe" inside the prefix (wine mode),
 #                   e.g. "C:/GOG Games/SimCity 4 Deluxe Edition/Apps/SimCity 4.exe"
 #                   or   "Z:/mnt/games/steamapps/common/SimCity 4 Deluxe/Apps/SimCity 4.exe"
 #   WINEPREFIX      Wine prefix to use (default: ~/.wine)
@@ -33,10 +39,11 @@ fi
 
 export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
 WINE="${WINE:-wine}"
+LAUNCH_MODE="${LAUNCH_MODE:-wine}"
 USE_GAMESCOPE="${USE_GAMESCOPE:-0}"
 GAMESCOPE_ARGS="${GAMESCOPE_ARGS:--f}"
 
-if [[ -z "${SC4_EXE:-}" ]]; then
+if [[ "$LAUNCH_MODE" == "wine" && -z "${SC4_EXE:-}" ]]; then
 	echo "simcity4-wine: SC4_EXE is not set. Set it in the environment or in $CONFIG_FILE." >&2
 	exit 1
 fi
@@ -50,7 +57,12 @@ for arg in "$@"; do
 		# The launcher passes -UserDir:"/linux/path/" (with literal quotes)
 		linux_path="${arg#-UserDir:}"
 		linux_path="${linux_path//\"/}"
-		windows_path="$(winepath -w "$linux_path")"
+		if [[ "$LAUNCH_MODE" == "steam" ]]; then
+			# Don't run winepath against the Proton prefix; Z: maps to / there too
+			windows_path="Z:${linux_path//\//\\}"
+		else
+			windows_path="$(winepath -w "$linux_path")"
+		fi
 		# SC4 expects a trailing backslash on the user directory
 		[[ "$windows_path" == *\\ ]] || windows_path="$windows_path\\"
 		args+=("-UserDir:$windows_path")
@@ -62,6 +74,25 @@ for arg in "$@"; do
 		args+=("$arg")
 	fi
 done
+
+if [[ "$LAUNCH_MODE" == "steam" ]]; then
+	echo "simcity4-wine: steam -applaunch 24780 ${args[*]}"
+	steam -applaunch 24780 "${args[@]}" >/dev/null 2>&1 &
+	# Steam hands the launch to its running instance and returns, so wait for
+	# the game ourselves; the launcher treats this script exiting as the game closing
+	for _ in $(seq 120); do
+		pgrep -f "SimCity 4.exe" >/dev/null && break
+		sleep 1
+	done
+	if ! pgrep -f "SimCity 4.exe" >/dev/null; then
+		echo "simcity4-wine: SimCity 4 did not start within 2 minutes." >&2
+		exit 1
+	fi
+	while pgrep -f "SimCity 4.exe" >/dev/null; do
+		sleep 2
+	done
+	exit 0
+fi
 
 echo "simcity4-wine: WINEPREFIX=$WINEPREFIX"
 echo "simcity4-wine: $SC4_EXE ${args[*]}"

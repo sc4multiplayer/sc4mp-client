@@ -9,3 +9,7 @@ USE_GAMESCOPE=0
 #GAMESCOPE_OUT_W=2560
 #GAMESCOPE_OUT_H=1440
 #GAMESCOPE_ARGS="-f"
+
+# Steam copy of SC4? Plain Wine fails with "Application load error 5:0000065434"
+# (Steam DRM). Launch through Steam/Proton instead (Steam must be running):
+#LAUNCH_MODE=steam

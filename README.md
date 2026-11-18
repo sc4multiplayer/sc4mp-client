@@ -4,6 +4,17 @@ A launcher for the PC videogame [SimCity 4](https://en.wikipedia.org/wiki/SimCit
 # Installation
 Download and run the installer from the [latest release](https://github.com/sc4multiplayer/sc4mp-client/releases/latest).
 
+## Linux
+The launcher runs natively with Python; only SimCity 4 itself runs through Wine.
+
+1. Install Python 3 with Tk (e.g. `python-tk`/`tk` from your package manager) and Pillow (`pip install pillow`, optional, for loading backgrounds).
+2. Install SimCity 4 into a Wine prefix (GOG, or Steam via Proton/Wine).
+3. Download the source ZIP, extract it, open a terminal in the extracted folder and run `python sc4mpclient.py`.
+4. Configure the wrapper: copy `linux/simcity4-wine.conf.example` to `~/.config/sc4mp/simcity4-wine.conf` and set `SC4_EXE` (and `WINEPREFIX` if it isn't `~/.wine`). Set `USE_GAMESCOPE=1` to run the game inside gamescope.
+5. In the launcher, open *Launcher > Settings > SC4...* and set *Custom installation path* to the full path of `linux/simcity4-wine.sh`.
+
+The wrapper converts the launcher's `-UserDir:` path to a Windows path with `winepath` and starts the game with `wine`.
+
 # Usage
 Follow the instructions included in the `Readme.html` file.
 

@@ -1,0 +1,11 @@
+# Copy to ~/.config/sc4mp/simcity4-wine.conf and edit.
+
+WINEPREFIX="$HOME/.wine"
+SC4_EXE="C:/GOG Games/SimCity 4 Deluxe Edition/Apps/SimCity 4.exe"
+#SC4_EXE="Z:/mnt/data/steam/steamapps/common/SimCity 4 Deluxe/Apps/SimCity 4.exe"
+
+# Optional: run inside gamescope (game resolution defaults to the launcher's SC4 resolution setting)
+USE_GAMESCOPE=0
+#GAMESCOPE_OUT_W=2560
+#GAMESCOPE_OUT_H=1440
+#GAMESCOPE_ARGS="-f"

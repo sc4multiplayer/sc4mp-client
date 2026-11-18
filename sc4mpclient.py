@@ -766,6 +766,15 @@ def get_sc4_path() -> Optional[Path]:
 	return None
 
 
+def ask_sc4_path(parent) -> str:
+	"""Prompts for the SimCity 4 path. On Windows this is the installation folder; elsewhere it is the launch script (e.g. a Wine wrapper) that gets run directly."""
+
+	if is_windows():
+		return filedialog.askdirectory(parent=parent)
+	else:
+		return filedialog.askopenfilename(parent=parent, title="Select the SimCity 4 launch script (e.g. linux/simcity4-wine.sh)")
+
+
 def start_sc4():
 	"""Attempts to find the install path of SimCity 4 and launches the game with custom launch parameters if found."""
 
@@ -2629,7 +2638,7 @@ class ServerLoader(th.Thread):
 						else:
 							sc4mp_ui.deiconify()
 						return
-					path = filedialog.askdirectory(parent=self.ui)
+					path = ask_sc4_path(self.ui)
 					if len(path) > 0:
 						sc4mp_config["SC4"]["game_path"] = path
 						if sc4mp_config["SC4"]["use_steam_browser_protocol"] in [0, 1]:
@@ -5037,7 +5046,7 @@ class SC4SettingsUI(tk.Toplevel):
 		self.path_frame.button.grid(row=0, column=1, columnspan=1, padx=10, pady=10)
 
 		# Path label
-		self.path_frame.label = ttk.Label(self.path_frame, text='If the launcher fails to find SimCity 4 installed on your computer, \nspecify the path to the game installation here.')
+		self.path_frame.label = ttk.Label(self.path_frame, text=('If the launcher fails to find SimCity 4 installed on your computer, \nspecify the path to the game installation here.' if is_windows() else 'Specify the path to your SimCity 4 launch script here \n(e.g. linux/simcity4-wine.sh, which runs the game through Wine).'))
 		self.path_frame.label.grid(row=1, column=0, columnspan=2, padx=10, pady=(0,10))
 
 		# Resolution frame
@@ -5129,7 +5138,7 @@ class SC4SettingsUI(tk.Toplevel):
 
 	def browse_path(self):
 		
-		path = filedialog.askdirectory(parent=self)
+		path = ask_sc4_path(self)
 		if len(path) > 0:
 			self.path_frame.entry.delete(0, 'end')
 			self.path_frame.entry.insert(0, path)
@@ -5194,7 +5203,7 @@ class SC4SettingsUI(tk.Toplevel):
 			# Check if a path to SimCity 4 can be found, prompt for a custom path if needed
 			while get_sc4_path() == None:
 				show_warning('No SimCity 4 installation found. \n\nPlease provide the correct installation path.')
-				path = filedialog.askdirectory(parent=sc4mp_ui)
+				path = ask_sc4_path(sc4mp_ui)
 				if len(path) > 0:
 					sc4mp_config["SC4"]["game_path"] = path
 					self.path_frame.entry.delete(0, 'end')
@@ -6124,8 +6133,11 @@ class ServerBackgroundUI(tk.Toplevel):
 		self.title(SC4MP_TITLE)
 
 		# Geometry
-		self.state('zoomed')
-		self.wm_attributes("-toolwindow", True)
+		if is_windows():
+			self.state('zoomed')
+			self.wm_attributes("-toolwindow", True)
+		else:
+			self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")	# "zoomed" and "-toolwindow" don't exist on X11
 		self.attributes("-fullscreen", sc4mp_config["SC4"]["fullscreen"])
 
 		# Load the image

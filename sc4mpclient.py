@@ -579,7 +579,7 @@ def update_config_constants(config):
 	global SC4MP_LAUNCHRESH
 	global SC4MP_CUSTOMPATH
 
-	SC4MP_LAUNCHPATH = config['STORAGE']['storage_path']
+	SC4MP_LAUNCHPATH = Path(config['STORAGE']['storage_path']).absolute()	# absolute, so a relative storage path (e.g. "_SC4MP") means the same folder everywhere, including to the game, which runs from its own folder
 	SC4MP_LAUNCHRESW = config['SC4']['resw']
 	SC4MP_LAUNCHRESH = config['SC4']['resh']
 	SC4MP_CUSTOMPATH = config['SC4']['game_path']
@@ -763,6 +763,29 @@ def get_sc4_path() -> Optional[Path]:
 			return possible_path
 
 	# Return `None` if none of the paths exist
+	return None
+
+
+def get_sc4_installation_plugins_path() -> Optional[Path]:
+	"""Returns the `Plugins` folder of the SimCity 4 installation, which the game loads alongside the one in the launch path."""
+
+	path = get_sc4_path()
+
+	if path is None:
+		return None
+
+	# The usual case: the path is the game exe, in "<installation>/Apps"
+	if is_windows() or path.suffix.lower() == ".exe":
+		return path.parent.parent / "Plugins"
+
+	# Otherwise the path is a launch script (e.g. `linux/simcity4-wine.sh`), which knows where the game is installed
+	try:
+		output = subprocess.run([str(path.absolute()), "--plugins-dir"], capture_output=True, text=True, timeout=10).stdout.strip()
+		if output:
+			return Path(output.splitlines()[-1])
+	except Exception as e:
+		show_error(f"Unable to get the SimCity 4 installation plugins path from \"{path}\".\n\n{e}", no_ui=True)
+
 	return None
 
 
@@ -3265,8 +3288,8 @@ class ServerLoader(th.Thread):
 		# Get checksums of plugins installed to the top-level of the program files plugins folder (to avoid dobule-loading DLLs)
 		toplevel_plugins_checksums = []
 		try:
-			installation_plugins_path = get_sc4_path().parent.parent / "Plugins"
-			for file_name in (os.listdir(installation_plugins_path) if installation_plugins_path.is_dir() else []):	# not there on Linux, where the "installation" is a launch script
+			installation_plugins_path = get_sc4_installation_plugins_path()
+			for file_name in (os.listdir(installation_plugins_path) if installation_plugins_path and installation_plugins_path.is_dir() else []):
 				file_path = installation_plugins_path / file_name
 				if file_path.is_file():
 					toplevel_plugins_checksums.append(md5(file_path))
@@ -3761,9 +3784,8 @@ class GameMonitor(th.Thread):
 		
 		city_paths = []
 		city_hashcodes = []
-		regions_path = Path(SC4MP_LAUNCHPATH) / "Regions"
 		for region in self.server.regions:
-			region_path: Path = regions_path / region
+			region_path: Path = region	# already the full path to the region, see `ServerLoader.prep_regions`
 			region_path.mkdir(parents=True, exist_ok=True)
 			if region_path.is_file(): # is this necessary?
 				continue

@@ -29,6 +29,13 @@
 #                   -r<width>x<height>x32 argument (SC4 settings > Resolution)
 #   GAMESCOPE_OUT_W/H  Output resolution, e.g. your monitor's (optional)
 #   GAMESCOPE_ARGS  Extra gamescope arguments (default: -f)
+#   SC4_PLUGINS_DIR Linux path to the game installation's Plugins folder. Only
+#                   needed if it can't be worked out from SC4_EXE (e.g. steam
+#                   mode without SC4_EXE set).
+#
+# `simcity4-wine.sh --plugins-dir` prints the installation's Plugins folder.
+# The launcher uses it to skip loading DLLs that are already installed there
+# (e.g. SC4Fix), since loading the same DLL twice can crash the game.
 
 set -euo pipefail
 
@@ -38,7 +45,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sc4mp/simcity4-wine.conf"
 for conf in "$CONFIG_FILE" "$SCRIPT_DIR/simcity4-wine.conf"; do
 	if [[ -f "$conf" ]]; then
-		echo "simcity4-wine: using $conf"
+		echo "simcity4-wine: using $conf" >&2
 		# shellcheck disable=SC1090
 		source "$conf"
 	fi
@@ -49,6 +56,22 @@ WINE="${WINE:-wine}"
 LAUNCH_MODE="${LAUNCH_MODE:-wine}"
 USE_GAMESCOPE="${USE_GAMESCOPE:-0}"
 GAMESCOPE_ARGS="${GAMESCOPE_ARGS:--f}"
+
+if [[ "${1:-}" == "--plugins-dir" ]]; then
+	dir="${SC4_PLUGINS_DIR:-}"
+	if [[ -z "$dir" && -n "${SC4_EXE:-}" ]]; then
+		exe="${SC4_EXE//\\//}"
+		if [[ "$exe" =~ ^[Zz]:(/.*)$ ]]; then
+			linux_exe="${BASH_REMATCH[1]}"		# Z: is the Linux root in Wine and Proton
+		else
+			linux_exe="$(winepath -u "$SC4_EXE" 2>/dev/null || true)"
+		fi
+		# "<install>/Apps/SimCity 4.exe" -> "<install>/Plugins"
+		[[ -n "$linux_exe" ]] && dir="$(dirname "$(dirname "$linux_exe")")/Plugins"
+	fi
+	[[ -n "$dir" ]] && echo "$dir"
+	exit 0
+fi
 
 if [[ "$LAUNCH_MODE" == "wine" && -z "${SC4_EXE:-}" ]]; then
 	echo "simcity4-wine: SC4_EXE is not set. Set it in the environment or in $CONFIG_FILE." >&2

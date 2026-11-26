@@ -9,7 +9,7 @@ from threading import Thread
 
 
 BUFFER_SIZE = 4096
-MAX_JSON_SIZE = 16_000_000	# bytes. File tables are the largest messages, and even big plugin folders make a few MB
+MAX_JSON_SIZE = 64_000_000	# bytes. File tables are the largest messages, and even big plugin folders make a few MB
 
 MESSAGE_PROTOCOL = 'SC4MP'
 

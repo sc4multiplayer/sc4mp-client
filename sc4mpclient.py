@@ -1878,6 +1878,10 @@ class ServerList(th.Thread):
 			joined_servers.sort(reverse=True)
 			self.unfetched_servers = [server for last_connected, server in joined_servers] + self.unfetched_servers
 
+			# But the official servers before them, by their hostname, so they're listed (and shown) as official even if the player joined them by IP address
+			official_servers = [server for server in SC4MP_SERVERS if server[0] == SC4MP_SERVERS_DOMAIN]
+			self.unfetched_servers = official_servers + [server for server in self.unfetched_servers if server not in official_servers]
+
 			if self.kill != None:
 				self.kill.end = True
 				while not self.kill.ended:

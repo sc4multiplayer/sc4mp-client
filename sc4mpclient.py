@@ -3420,6 +3420,7 @@ class GameMonitor(th.Thread):
 		# For status window and overlay window
 		self.ui = None
 		self.overlay_ui = None
+		self.overlay_state = None
 
 		# If UI enabled (not commandline mode)
 		if sc4mp_ui is not None:
@@ -3585,6 +3586,9 @@ class GameMonitor(th.Thread):
 		previous_cities = dict(self.cities)
 		check_time = time.time()
 
+		# The save status before "Saving...", to show again if SC4 only rewrote neighbours
+		previous_status = self.get_status()
+
 		save_city_paths = self.get_modified_cities()
 
 		if not save_city_paths:
@@ -3595,6 +3599,7 @@ class GameMonitor(th.Thread):
 
 		if not save_city_paths:
 			self.bridge.progress("")	# nothing to push after all, so the "Saving..." line in the game's chat goes again
+			self.set_status(previous_status)
 			return
 
 		# Push them. If errors occur, log them in the console and display a warning
@@ -4532,9 +4537,35 @@ class GameMonitor(th.Thread):
 
 
 	def set_overlay_state(self, state):
+		self.overlay_state = state
 		if self.overlay_ui is not None:
 			self.overlay_ui.set_state(state)
 		self.bridge.status(state)	# the save status in the game's chat panel too
+
+
+	def get_status(self):
+		"""Returns the save status shown in the game monitor, the game overlay and the game's chat panel, to show again with `set_status`."""
+
+		label = None
+		if self.ui is not None:
+			label = (self.ui.label['text'], self.ui.label['fg'])
+		return label, self.overlay_state, self.bridge.last_status
+
+
+	def set_status(self, status):
+		"""Shows a save status from `get_status` again, as it was (eg. "Saved" with the time it was saved)."""
+
+		label, overlay_state, bridge_status = status
+		if label is not None and self.ui is not None:
+			self.ui.label['text'] = label[0]
+			self.ui.label.config(fg=label[1])
+		self.overlay_state = overlay_state
+		if overlay_state is not None and self.overlay_ui is not None:
+			self.overlay_ui.set_state(overlay_state)
+		if bridge_status is not None:
+			with self.bridge._send_lock:
+				self.bridge.last_status = bridge_status
+			self.bridge.send(bridge_status)
 
 
 	def set_connected_state(self):

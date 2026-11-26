@@ -810,7 +810,7 @@ class NetworkException(Exception):
 
 	def __str__(self):
 		
-		return self.message
+		return str(self.message)	# eg. an `error` header that isn't a string
 
 
 class ConnectionClosedException(NetworkException):

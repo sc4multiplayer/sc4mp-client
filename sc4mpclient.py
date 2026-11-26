@@ -1503,7 +1503,7 @@ class Server:
 		except KeyError:
 			pass
 
-		if self.server_id in sc4mp_servers_database.keys() and self.is_saved_address():
+		if self.server_id in sc4mp_servers_database.keys():
 			self.password = sc4mp_servers_database[self.server_id].get("password", None) # Needed for stat fetching private servers
 
 		if self.password_enabled:
@@ -1649,21 +1649,8 @@ class Server:
 		return (total_size, download_size)
 
 
-	def is_saved_address(self) -> bool:
-		"""Whether the server is at the address its database entry was saved for (or has no entry yet). The saved password, user ID and token are only used automatically there."""
-
-		entry = sc4mp_servers_database.get(self.server_id, None)
-		if not entry or "host" not in entry:
-			return True
-		return (str(entry["host"]), str(entry.get("port"))) == (str(self.host), str(self.port))
-
-
 	def update_database(self):
 		"""Updates the json entry for the server."""
-
-		# A server at another address than the one saved for its server ID is only trusted once it passes the token check when joining (see `authenticate`)
-		if not self.is_saved_address():
-			return
 
 		# Get database entry for server
 		key = self.server_id
@@ -1711,10 +1698,7 @@ class Server:
 				else:
 					if not sc4mp_config["GENERAL"]["ignore_token_errors"]:
 						if sc4mp_ui:
-							message = "The server failed to authenticate.\n\nThe user ID corresponding to your last login could not be produced by the server. A recent rollback of the server, or a recent failed authentication attempt may be to blame.\n\nIf you proceed, your user ID may become compromised."
-							if not self.is_saved_address():
-								message = "The server failed to authenticate.\n\nThis server uses the ID of a server you joined at another address, but couldn't prove it's the same server. It may have moved and been rolled back, or it may be a different server.\n\nIf you proceed, your user ID may become compromised."
-							if messagebox.askokcancel(title=SC4MP_TITLE, message=message, icon="warning"):
+							if messagebox.askokcancel(title=SC4MP_TITLE, message="The server failed to authenticate.\n\nThe user ID corresponding to your last login could not be produced by the server. A recent rollback of the server, or a recent failed authentication attempt may be to blame.\n\nIf you proceed, your user ID may become compromised.", icon="warning"):
 								self.user_id = user_id
 							else:
 								raise ClientException("Connection cancelled.")
@@ -1734,10 +1718,9 @@ class Server:
 		# if len(token) < 1:
 		# 	raise ClientException("Authentication failed.\n\nThe reason could be any of the following:\n(1)   You are banned from this server.\n(2)   You have too many different user accounts on this server.\n(3)   There is a problem with your internet connection.")
 
-		# Set user_id and token in the database entry, and the server's address, since it proved it's the same server
+		# Set user_id and token in the database entry
 		entry["user_id"] = user_id
 		entry["token"] = token
-		set_server_data(entry, self)
 		entry.setdefault("first_logon", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 		entry["last_logon"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -2842,7 +2825,7 @@ class ServerLoader(th.Thread):
 
 		if self.server.password_enabled:
 			if self.server.password is None:
-				if sc4mp_config["GENERAL"]["save_server_passwords"] and self.server.is_saved_address():
+				if sc4mp_config["GENERAL"]["save_server_passwords"]:
 					try:
 						self.server.password = sc4mp_servers_database[self.server.server_id]["password"]
 					except Exception:

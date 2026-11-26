@@ -40,7 +40,7 @@ except ImportError:
 from core.config import Config
 from core.database import Database
 from core.dbpf import SC4Savegame, SC4Config
-from core.networking import ClientSocket, NetworkException
+from core.networking import ClientSocket, NetworkException, RefusedException
 from core.util import *
 
 
@@ -2817,6 +2817,8 @@ class ServerLoader(th.Thread):
 				if self.server.password != "":
 					self.server.authenticate()
 				break
+			except RefusedException as e:
+				raise ClientException(str(e)) from e	# eg. banned, or too many accounts on one IP address
 			except (NetworkException, socket.error, socket.timeout) as e:
 				self.connection_failed_retrying(e)
 
@@ -3170,6 +3172,10 @@ class ServerLoader(th.Thread):
 				self.report_progress(f"Synchronizing {target}... (100%)", 100, 100)
 
 				break
+
+			except RefusedException as e:
+
+				raise ClientException(str(e)) from e	# eg. the password is needed on a private server
 
 			except (NetworkException, socket.error, socket.timeout) as e:
 

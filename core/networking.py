@@ -218,7 +218,7 @@ def request(s, command, **headers) -> dict:
 			)
 		
 		if error := h.get('error'):
-			raise NetworkException(error)
+			raise RefusedException(error)
 
 		return h
 	
@@ -811,6 +811,10 @@ class NetworkException(Exception):
 	def __str__(self):
 		
 		return str(self.message)	# eg. an `error` header that isn't a string
+
+
+class RefusedException(NetworkException):
+	"""The server answered with an error (eg. "Incorrect password."), so trying again won't help, unlike when the connection fails."""
 
 
 class ConnectionClosedException(NetworkException):

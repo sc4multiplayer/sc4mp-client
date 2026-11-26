@@ -1652,7 +1652,7 @@ class Server:
 	def is_saved_address(self) -> bool:
 		"""Whether the server is at the address its database entry was saved for (or has no entry yet). The saved password, user ID and token are only used automatically there."""
 
-		entry = sc4mp_servers_database.get(self.server_id)
+		entry = sc4mp_servers_database.get(self.server_id, None)
 		if not entry or "host" not in entry:
 			return True
 		return (str(entry["host"]), str(entry.get("port"))) == (str(self.host), str(self.port))
@@ -3281,7 +3281,7 @@ class ServerLoader(th.Thread):
 		for child in regions_directory.iterdir():
 			if child.is_dir():
 				self.server.regions.append(child)
-				config_path = regions_directory / child / "region.ini"
+				config_path = child / "region.ini"
 				prep_region_config(config_path)
 
 		# Create `Downloads` directory in the `Regions` folder
@@ -5164,7 +5164,7 @@ class RegionsRefresher(th.Thread):
 
 				# Purge the region directories
 				for region in self.server.regions:
-					purge_directory(destination / region)
+					purge_directory(region)
 
 				# Receive file table
 				with self.server.socket() as s:
@@ -5305,7 +5305,7 @@ class RegionsRefresher(th.Thread):
 
 				# Prep region configs
 				for region in self.server.regions:
-					prep_region_config(destination / region / "region.ini")
+					prep_region_config(region / "region.ini")
 
 				# Report
 				self.report("", "Done.")

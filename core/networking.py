@@ -5,7 +5,7 @@ import time
 
 
 SC4MP_BUFFER_SIZE = 4096
-SC4MP_MAX_JSON_SIZE = 16_000_000	# bytes. File tables are the largest messages, and even big plugin folders make a few MB
+SC4MP_MAX_JSON_SIZE = 64_000_000	# bytes. File tables are the largest messages, and even big plugin folders make a few MB
 
 
 def send_json(s, data, length_encoding="I"):

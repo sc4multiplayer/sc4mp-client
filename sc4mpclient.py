@@ -1921,6 +1921,11 @@ class ServerList(th.Thread):
 						fetched_server = self.fetched_servers.pop(0)
 						if fetched_server.server_id not in self.servers.keys() or not self.servers[fetched_server.server_id].fetched:
 							self.servers[fetched_server.server_id] = fetched_server
+						elif "Official" in fetched_server.categories and "Official" not in self.servers[fetched_server.server_id].categories:
+							# The same server, fetched by the official servers' hostname after being listed by its IP address, is shown (and joined) as official
+							self.servers[fetched_server.server_id] = fetched_server
+							if self.ui.tree.exists(fetched_server.server_id) and not fetched_server.password_enabled:
+								self.ui.tree.item(fetched_server.server_id, image=self.official_icon, tags=())
 
 					# Fetch the next unfetched server
 					for unfetched_servers in [self.unfetched_servers, self.lan_servers]:

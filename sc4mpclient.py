@@ -984,6 +984,24 @@ def start_sc4(bridge_port=None):
 	print("SimCity 4 closed.")
 
 
+def uses_steam_browser_protocol() -> bool:
+	"""Whether `start_sc4` will start the game through Steam's browser protocol."""
+
+	setting = sc4mp_config["SC4"]["use_steam_browser_protocol"]
+	if setting == 2:
+		return True
+	if setting == 1:
+		path = get_sc4_path()
+		return path is not None and is_steam_sc4(path)
+	return False
+
+
+def uses_legacy_game_monitor() -> bool:
+	"""Whether the legacy game monitor is used instead of the SC4MP DLL: when the player chose it, or when the game is started through Steam, which can't pass the DLL the launcher's port."""
+
+	return sc4mp_config["GENERAL"]["legacy_game_monitor"] or uses_steam_browser_protocol()
+
+
 def is_steam_sc4(path: Path):
 
 	#COMMON_STEAM_FILES = ["Steam.dll", "steam_api.dll", "steam_api64.dll", "steam_appid.txt", "steamclient.dll", "steamclient64.dll"]
@@ -3230,7 +3248,7 @@ class ServerLoader(th.Thread):
 			"sc4mp-ui.dat",
 		]:
 			# The SC4MP DLL isn't used with the legacy game monitor
-			if default_plugin_file_name in ("sc4mp.dll", "sc4mp-dll-ui.dat", "sc4mp-third-party-notices.txt") and sc4mp_config["GENERAL"]["legacy_game_monitor"]:
+			if default_plugin_file_name in ("sc4mp.dll", "sc4mp-dll-ui.dat", "sc4mp-third-party-notices.txt") and uses_legacy_game_monitor():
 				continue
 			try:
 				default_plugin_file_path = default_plugins_source / default_plugin_file_name
@@ -3369,7 +3387,6 @@ class GameMonitor(th.Thread):
 	NEIGHBOR_REWRITE_TIME = 60	# seconds after a push in which SC4 may still be rewriting the neighbours of the city that was saved
 	DATE_SUBFILE = "2990c1e5"	# the savegame subfile with the simulation date, which only changes in the city the player saved
 	SAVED_CITY_WAIT = 3			# seconds without SC4 writing a savegame after which it's taken to be done saving, when it has only written neighbours
-	DLL_CONNECT_TIMEOUT = 120	# seconds after the game starts to wait for the SC4MP DLL before showing the game monitor instead
 
 
 	def __init__(self, server):
@@ -3434,7 +3451,7 @@ class GameMonitor(th.Thread):
 				self.ui = GameMonitorUI(self)
 
 			# The SC4MP DLL shows the chat and the save status in game, unless the player chose the legacy game monitor (and overlay) instead
-			if not sc4mp_config["GENERAL"]["legacy_game_monitor"]:
+			if not uses_legacy_game_monitor():
 				self.ui.withdraw()
 
 			# Create game overlay window if the game overlay is enabled (`1` is fullscreen-mode only; `2` is always enabled)
@@ -3451,15 +3468,13 @@ class GameMonitor(th.Thread):
 		# Listen for the SC4MP DLL before the game starts, so the game can be told where to connect (not with the legacy game monitor)
 		self.bridge = GameBridge(self)
 		bridge_port = None
-		if not sc4mp_config["GENERAL"]["legacy_game_monitor"]:
+		if not uses_legacy_game_monitor():
 			self.bridge.start()
 			bridge_port = self.bridge.port
 
 		# Start the game launcher thread (starts the game)
 		self.game_launcher = GameLauncher(bridge_port)
 		self.game_launcher.start()
-		self.game_start_time = time.time()
-		self.monitor_shown_without_dll = False
 
 		# Chat messages already shown (recent messages are sent again when the event listener reconnects)
 		self.chat_messages = set()
@@ -3503,8 +3518,6 @@ class GameMonitor(th.Thread):
 
 					self.update_chat()
 
-					self.check_dll()
-
 					# Break the loop the iteration after the game closes
 					if game_closed:
 						break
@@ -3534,22 +3547,6 @@ class GameMonitor(th.Thread):
 
 			self.event_listener.stop()
 			self.bridge.stop()
-
-
-	def check_dll(self):
-		"""Shows the game monitor while the SC4MP DLL isn't connected (eg. the game was started through Steam, which can't tell it the launcher's port), so the save status and the chat are still shown somewhere. Hides it again if the DLL connects later."""
-
-		if sc4mp_config["GENERAL"]["legacy_game_monitor"] or self.ui is None:
-			return
-
-		if self.bridge.connected():
-			if self.monitor_shown_without_dll:
-				self.monitor_shown_without_dll = False
-				self.ui.withdraw()
-		elif not self.monitor_shown_without_dll and time.time() - self.game_start_time >= self.DLL_CONNECT_TIMEOUT and not self.bridge.was_connected:
-			print("[WARNING] The SC4MP DLL hasn't connected, so the game monitor is shown instead.")
-			self.monitor_shown_without_dll = True
-			self.ui.deiconify()
 
 
 	def welcome(self):
@@ -4731,7 +4728,6 @@ class GameBridge(th.Thread):
 		self.port = self.listener.getsockname()[1]
 
 		self._socket = None
-		self.was_connected = False	# whether the DLL has connected since the game started
 		self._send_lock = th.Lock()
 		self._claims_lock = th.Lock()	# so two pushes of the claims don't interleave
 		self._claims_pending_lock = th.Lock()
@@ -4781,7 +4777,6 @@ class GameBridge(th.Thread):
 
 				with self._send_lock:
 					self._socket = connection
-				self.was_connected = True
 
 				try:
 					self.receive(connection)

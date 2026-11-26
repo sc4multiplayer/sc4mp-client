@@ -984,6 +984,24 @@ def start_sc4(bridge_port=None):
 	print("SimCity 4 closed.")
 
 
+def uses_steam_browser_protocol() -> bool:
+	"""Whether `start_sc4` will start the game through Steam's browser protocol."""
+
+	setting = sc4mp_config["SC4"]["use_steam_browser_protocol"]
+	if setting == 2:
+		return True
+	if setting == 1:
+		path = get_sc4_path()
+		return path is not None and is_steam_sc4(path)
+	return False
+
+
+def uses_legacy_game_monitor() -> bool:
+	"""Whether the legacy game monitor is used instead of the SC4MP DLL: when the player chose it, or when the game is started through Steam, which can't pass the DLL the launcher's port."""
+
+	return sc4mp_config["GENERAL"]["legacy_game_monitor"] or uses_steam_browser_protocol()
+
+
 def is_steam_sc4(path: Path):
 
 	#COMMON_STEAM_FILES = ["Steam.dll", "steam_api.dll", "steam_api64.dll", "steam_appid.txt", "steamclient.dll", "steamclient64.dll"]
@@ -3236,7 +3254,7 @@ class ServerLoader(th.Thread):
 			"sc4mp-ui.dat",
 		]:
 			# The SC4MP DLL isn't used with the legacy game monitor
-			if default_plugin_file_name in ("sc4mp.dll", "sc4mp-dll-ui.dat", "sc4mp-third-party-notices.txt") and sc4mp_config["GENERAL"]["legacy_game_monitor"]:
+			if default_plugin_file_name in ("sc4mp.dll", "sc4mp-dll-ui.dat", "sc4mp-third-party-notices.txt") and uses_legacy_game_monitor():
 				continue
 			try:
 				default_plugin_file_path = default_plugins_source / default_plugin_file_name
@@ -3440,7 +3458,7 @@ class GameMonitor(th.Thread):
 				self.ui = GameMonitorUI(self)
 
 			# The SC4MP DLL shows the chat and the save status in game, unless the player chose the legacy game monitor (and overlay) instead
-			if not sc4mp_config["GENERAL"]["legacy_game_monitor"]:
+			if not uses_legacy_game_monitor():
 				self.ui.withdraw()
 
 			# Create game overlay window if the game overlay is enabled (`1` is fullscreen-mode only; `2` is always enabled)
@@ -3457,7 +3475,7 @@ class GameMonitor(th.Thread):
 		# Listen for the SC4MP DLL before the game starts, so the game can be told where to connect (not with the legacy game monitor)
 		self.bridge = GameBridge(self)
 		bridge_port = None
-		if not sc4mp_config["GENERAL"]["legacy_game_monitor"]:
+		if not uses_legacy_game_monitor():
 			self.bridge.start()
 			bridge_port = self.bridge.port
 

@@ -4222,12 +4222,13 @@ class GameMonitor(th.Thread):
 	def get_claims(self) -> list[dict]:
 		"""Returns the cities in the server's regions that belong to other mayors, as `path` (the savegame), `owner` and `city` (its name), by the same rule as `get_city_owner`. They're sent to the DLL, which can then warn the moment one of them opens, before the game's own prompts."""
 
-		# The server's time and each region's database are asked for once, since the server blocks clients that connect too often
+		# The server's time and the regions' databases are asked for once, since the server blocks clients that connect too often
 		claims = []
 		now = self.server.time()
-		for region in self.server.regions:
-			region_name = PureWindowsPath(str(region)).name
-			database = self.get_region_database(region_name) or {}
+		region_names = [PureWindowsPath(str(region)).name for region in self.server.regions]
+		databases = self.get_region_databases(region_names)
+		for region_name in region_names:
+			database = databases.get(region_name) or {}
 			# The database has each tile's savegame and city name, so the savegames aren't parsed (which would keep the game from saving them meanwhile)
 			for entry in database.values():
 				if not entry or not entry.get("filename"):
@@ -4237,6 +4238,30 @@ class GameMonitor(th.Thread):
 					city_path = Path(SC4MP_LAUNCHPATH) / "Regions" / region_name / PureWindowsPath(entry["filename"]).name
 					claims.append({'path': str(city_path), 'owner': owner, 'city': entry.get("city_name") or city_path.stem})
 		return claims
+
+
+	def get_region_databases(self, regions: list[str]) -> dict[str, dict]:
+		"""Returns the server's databases of these regions, by region name, like `get_region_database` but with one request for the file table and one for the data, however many regions there are."""
+
+		databases = {}
+
+		try:
+			relpaths = {f"{region}/_Database/region.json": region for region in regions}
+			with self.server.socket() as s:
+				file_table = s.regions_table()
+			entries = [entry for entry in file_table if entry[2] in relpaths]
+			if entries:
+				with self.server.socket() as s:
+					for _, _, relpath, chunks in s.regions_data(entries):
+						databases[relpaths[relpath]] = json.loads(b"".join(chunks).decode())
+		except Exception as e:
+			show_error(f"Unable to download the region databases, using the local copies instead.\n\n{e}", no_ui=True)
+
+		for region in regions:
+			if region not in databases:
+				databases[region] = load_json(Path(SC4MP_LAUNCHPATH) / "Regions" / region / "_Database" / "region.json")
+
+		return databases
 
 
 	def get_region_database(self, region: str) -> dict:

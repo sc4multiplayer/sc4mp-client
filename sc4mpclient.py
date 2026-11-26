@@ -1708,12 +1708,13 @@ class Server:
 			with self.socket() as s:
 				if s.user_id(hash) == hashlib.sha256(user_id.encode()).hexdigest()[:32]:
 					self.user_id = user_id
-				elif not self.is_saved_address():
-					raise ClientException("This server uses the ID of a server you joined at another address, but couldn't prove it's the same server, so your user ID wasn't sent to it.")
 				else:
 					if not sc4mp_config["GENERAL"]["ignore_token_errors"]:
 						if sc4mp_ui:
-							if messagebox.askokcancel(title=SC4MP_TITLE, message="The server failed to authenticate.\n\nThe user ID corresponding to your last login could not be produced by the server. A recent rollback of the server, or a recent failed authentication attempt may be to blame.\n\nIf you proceed, your user ID may become compromised.", icon="warning"):
+							message = "The server failed to authenticate.\n\nThe user ID corresponding to your last login could not be produced by the server. A recent rollback of the server, or a recent failed authentication attempt may be to blame.\n\nIf you proceed, your user ID may become compromised."
+							if not self.is_saved_address():
+								message = "The server failed to authenticate.\n\nThis server uses the ID of a server you joined at another address, but couldn't prove it's the same server. It may have moved and been rolled back, or it may be a different server.\n\nIf you proceed, your user ID may become compromised."
+							if messagebox.askokcancel(title=SC4MP_TITLE, message=message, icon="warning"):
 								self.user_id = user_id
 							else:
 								raise ClientException("Connection cancelled.")

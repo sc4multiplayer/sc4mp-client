@@ -3702,7 +3702,7 @@ class GameMonitor(th.Thread):
 
 			# SC4 rewrites some neighbours after the saved city, so these are expected for a while after a push
 			recently_pushed = self.last_push_time is not None and check_time - self.last_push_time < self.NEIGHBOR_REWRITE_TIME
-			if recently_pushed and not unknown_paths and not set(unchanged_paths) & set(self.last_pushed_cities):
+			if recently_pushed and not unknown_paths and not set(unchanged_paths) & set(self.last_pushed_cities) and all(self.borders(path, self.last_pushed_cities) for path in unchanged_paths):
 				self.city_dates.update(dates)
 				print(f"Not pushing {', '.join(path.name for path in unchanged_paths)}, rewritten by SC4 as neighbours of the city saved last.")
 				return []
@@ -3724,6 +3724,28 @@ class GameMonitor(th.Thread):
 		self.city_dates.update(dates)
 		print(f"Couldn't tell the saved city from its neighbours by their dates, so pushing {', '.join(path.name for path in save_city_paths)} as before.")
 		return save_city_paths
+
+
+	def borders(self, path: Path, other_paths: list[Path]) -> bool:
+		"""Whether the savegame at `path` is next to any of the others (eg. the cities pushed last), since SC4 only rewrites the neighbours of the city it saves. `True` if it can't be told."""
+
+		def get_tiles(path):
+			with SC4Savegame(path, error_callback=None) as savegame:
+				city = savegame.get_SC4ReadRegionalCity()
+				return city["tileXLocation"], city["tileYLocation"], city["citySizeX"], city["citySizeY"]
+
+		try:
+			x, y, size_x, size_y = get_tiles(path)
+			for other_path in other_paths:
+				other_x, other_y, other_size_x, other_size_y = get_tiles(other_path)
+				# Touching along an edge or at a corner
+				if x <= other_x + other_size_x and other_x <= x + size_x and y <= other_y + other_size_y and other_y <= y + size_y:
+					return True
+		except Exception as e:
+			show_error(e, no_ui=True)
+			return True
+
+		return False
 
 
 	def get_date(self, path: Path) -> Optional[bytes]:

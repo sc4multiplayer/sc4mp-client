@@ -1722,6 +1722,8 @@ class Server:
 								raise ClientException("Connection cancelled.")
 						else:
 							raise ClientException("Invalid token.") #"Authentication error."
+					else:
+						self.user_id = user_id	# as if the warning was accepted
 		else:
 			self.user_id = user_id
 

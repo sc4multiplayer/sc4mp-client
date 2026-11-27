@@ -1471,7 +1471,6 @@ class Server:
 		self.password = None
 		self.user_id = None
 		self.guest = None
-		self.verified = False	# whether the server passed the token check for its saved entry
 		self.chat_enabled = False
 		self.guest_chat = False
 
@@ -1522,9 +1521,8 @@ class Server:
 		except KeyError:
 			pass
 
-		# Any server can report any server ID, so only use the saved password if the server proves it's the one it was saved for
-		self.verified = self.check_token()
-		if self.verified:
+		# Any server can report any server ID, so only use the saved password at the address it was saved for
+		if self.server_id in sc4mp_servers_database.keys() and self.is_saved_address():
 			self.password = sc4mp_servers_database[self.server_id].get("password", None) # Needed for stat fetching private servers
 
 		if self.password_enabled:
@@ -1677,8 +1675,8 @@ class Server:
 		key = self.server_id
 		entry = sc4mp_servers_database.get(key, dict())
 
-		# Leave the entry of a joined server alone if this server couldn't prove it's the same server
-		if "user_id" in entry.keys() and not self.verified:
+		# Leave a saved entry alone (address, name, History) if this server reports its server ID from another address
+		if key in sc4mp_servers_database.keys() and not self.is_saved_address():
 			return
 
 		sc4mp_servers_database[key] = entry
@@ -1690,7 +1688,9 @@ class Server:
 			self.categories.append("Bookmarked")
 
 		# Set values in database entry
+		host = entry.get("host", self.host)
 		set_server_data(entry, self)
+		entry["host"] = host	# keeps the saved hostname when the server is reached by its IP address
 
 
 	def authenticate(self):
@@ -1750,21 +1750,29 @@ class Server:
 		entry.setdefault("first_logon", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 		entry["last_logon"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+		# Joining the server at another address moves its saved entry there, with only the password the player typed there
+		if not self.is_saved_address():
+			entry.pop("password", None)
+			if sc4mp_config["GENERAL"]["save_server_passwords"] and self.password is not None:
+				entry["password"] = self.password
+			set_server_data(entry, self)
 
-	def check_token(self):
-		"""Whether the server can produce the saved user ID from the hash of the user ID and token, which only the server it was saved for can do."""
+
+	def is_saved_address(self):
+		"""Whether the server was reached at the address its saved entry was saved for."""
 
 		entry = sc4mp_servers_database.get(self.server_id, dict())
 
-		user_id = entry.get("user_id", None)
-		token = entry.get("token", None)
-		if user_id is None or token is None:
+		host = entry.get("host", None)
+		if host is None or entry.get("port", None) != self.port:
 			return False
+		if host == self.host:
+			return True
 
-		hash = hashlib.sha256(((hashlib.sha256(user_id.encode()).hexdigest()[:32]) + token).encode()).hexdigest()
+		# The same server reached by the IP address its saved hostname points to (eg. servers.sc4mp.org)
 		try:
-			with self.socket() as s:
-				return s.user_id(hash) == hashlib.sha256(user_id.encode()).hexdigest()[:32]
+			socket.inet_aton(self.host)
+			return self.host in socket.gethostbyname_ex(host)[2]
 		except Exception:
 			return False
 
@@ -2871,19 +2879,21 @@ class ServerLoader(th.Thread):
 
 		if self.server.password_enabled:
 			if self.server.password is None:
-				if sc4mp_config["GENERAL"]["save_server_passwords"] and self.server.verified:
+				if sc4mp_config["GENERAL"]["save_server_passwords"] and self.server.is_saved_address():
 					try:
 						self.server.password = sc4mp_servers_database[self.server.server_id]["password"]
 					except Exception:
 						return False
+				else:
+					return False
 			if self.server.password == "":
 				return True
 			if self.ui is not None:
 				self.ui.label['text'] = "Authenticating..."
 			with self.server.socket() as s:
 				if s.check_password(password=self.server.password):
-					# Not into the entry of a joined server this server couldn't prove it's the same as
-					if sc4mp_config["GENERAL"]["save_server_passwords"] and (self.server.verified or "user_id" not in sc4mp_servers_database.get(self.server.server_id, dict())):
+					# At another address, the password is saved once the player joins (see `Server.authenticate`)
+					if sc4mp_config["GENERAL"]["save_server_passwords"] and self.server.is_saved_address():
 						try:
 							sc4mp_servers_database[self.server.server_id]["password"] = self.server.password
 						except Exception as e:

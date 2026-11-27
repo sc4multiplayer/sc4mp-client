@@ -18,7 +18,9 @@ class Database:
 		self._data = {}
 
 		self._serialized_data = None
+		self._snapshot = None
 		self._lock = Lock()
+		self._save_lock = Lock()
 
 		self._load()
 
@@ -50,13 +52,6 @@ class Database:
 
 	
 	@staticmethod
-	def _serialize(data: dict) -> str:
-		# Other threads can change nested entries while they're being serialized, and the indented encoder is pure Python, so
-		# it fails with "dictionary changed size during iteration". Snapshot the data with the unindented C encoder first.
-		return json.dumps(json.loads(json.dumps(data)), indent=4)
-	
-
-	@staticmethod
 	def _deserialize(serialized_data: str) -> dict:
 		return json.loads(serialized_data)
 
@@ -80,16 +75,25 @@ class Database:
 
 
 	def update_json(self):
-		with self._lock:
-			serialized_data = self._serialize(self._data.copy())
-			if serialized_data == self._serialized_data:
+		# Saves are done one at a time, so an older snapshot can't be written over a newer one
+		with self._save_lock:
+			# Other threads can change nested entries while they're being serialized, and the indented encoder is pure Python, so
+			# it fails with "dictionary changed size during iteration". Snapshot the data with the unindented C encoder first.
+			# Only the snapshot is taken while holding the lock, since formatting and writing a large database can take a while,
+			# and every other thread using the database would wait for it.
+			with self._lock:
+				snapshot = json.dumps(self._data)
+			if snapshot == self._snapshot:
 				return
-			if self.filename.exists():
-				if self._backup_filename.exists():
-					os.unlink(self._backup_filename)
-				shutil.copy(self.filename, self._backup_filename)
-			self._update_file(self.filename, serialized_data)
-			self._serialized_data = serialized_data
+			serialized_data = json.dumps(json.loads(snapshot), indent=4)
+			if serialized_data != self._serialized_data:
+				if self.filename.exists():
+					if self._backup_filename.exists():
+						os.unlink(self._backup_filename)
+					shutil.copy(self.filename, self._backup_filename)
+				self._update_file(self.filename, serialized_data)
+				self._serialized_data = serialized_data
+			self._snapshot = snapshot
 
 
 	def __repr__(self):

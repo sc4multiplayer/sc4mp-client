@@ -30,7 +30,10 @@ class Config:
 					for item_name in section:
 						try:
 							from_file = parser.get(section_name, item_name)
-							if from_file in ("true", "True", "TRUE"):
+							# Text settings (eg. the password) are kept as written, even if they say true, false or none
+							if isinstance(self.data[section_name][item_name], str):
+								self.data[section_name][item_name] = from_file
+							elif from_file in ("true", "True", "TRUE"):
 								self.data[section_name][item_name] = True
 							elif from_file in ("false", "False", "FALSE"):
 								self.data[section_name][item_name] = False

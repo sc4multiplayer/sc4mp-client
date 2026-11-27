@@ -653,10 +653,14 @@ def sanitize_relpath(basepath: Path, relpath: str) -> Path:
 
 	fullpath = basepath / relpath
 
-	if str(fullpath.resolve()).startswith(str(basepath.resolve())):
-		return fullpath
-	else:
-		raise ValueError(f"Invalid relative path: \"{relpath}\".")
+	# Compare path parts, not strings, so "../server-evil" isn't inside "server". The folder itself isn't a valid file path either
+	try:
+		if fullpath.resolve().relative_to(basepath.resolve()).parts:
+			return fullpath
+	except ValueError:
+		pass
+
+	raise ValueError(f"Invalid relative path: \"{relpath}\".")
 
 
 def calculate_latency(function: Callable) -> tuple:

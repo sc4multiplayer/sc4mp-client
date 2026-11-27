@@ -3270,10 +3270,11 @@ class ServerLoader(th.Thread):
 		toplevel_plugins_checksums = []
 		try:
 			installation_plugins_path = get_sc4_installation_plugins_path()
-			for file_name in (os.listdir(installation_plugins_path) if installation_plugins_path and installation_plugins_path.is_dir() else []):
-				file_path = installation_plugins_path / file_name
-				if file_path.is_file():
-					toplevel_plugins_checksums.append(md5(file_path))
+			if installation_plugins_path is not None and installation_plugins_path.is_dir():
+				for file_name in os.listdir(installation_plugins_path):
+					file_path = installation_plugins_path / file_name
+					if file_path.is_file():
+						toplevel_plugins_checksums.append(md5(file_path))
 		except Exception as e:
 			show_error(e, no_ui=True)
 
@@ -6122,7 +6123,11 @@ class SC4SettingsUI(tk.Toplevel):
 		self.path_frame.button.grid(row=0, column=1, columnspan=1, padx=10, pady=10)
 
 		# Path label
-		self.path_frame.label = ttk.Label(self.path_frame, text=('If the launcher fails to find SimCity 4 installed on your computer, \nspecify the path to the game installation here.' if is_windows() else 'Specify the path to your SimCity 4 launch script here \n(e.g. linux/simcity4-wine.sh, which runs the game through Wine).'))
+		if is_windows():
+			path_label_text = 'If the launcher fails to find SimCity 4 installed on your computer, \nspecify the path to the game installation here.'
+		else:
+			path_label_text = 'Specify the path to your SimCity 4 launch script here \n(e.g. linux/simcity4-wine.sh, which runs the game through Wine).'
+		self.path_frame.label = ttk.Label(self.path_frame, text=path_label_text)
 		self.path_frame.label.grid(row=1, column=0, columnspan=2, padx=10, pady=(0,10))
 
 		# Resolution frame

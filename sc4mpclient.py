@@ -4051,10 +4051,11 @@ class GameMonitor(th.Thread):
 				lines.append(motd)
 				if self.overlay_ui is not None:
 					self.overlay_ui.show_message(motd)
-				self.bridge.notify(motd)
 			if isinstance(self.ui, GameMonitorUI):
 				for line in lines:
 					self.ui.add_chat_info(line)
+			for line in lines:
+				self.bridge.notify(line)	# the game's chat panel too, so it also says where the chat history ends
 			self.chat_motd_last = bool(motd)
 			return
 

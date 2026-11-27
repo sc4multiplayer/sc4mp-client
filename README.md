@@ -15,6 +15,8 @@ The launcher runs natively with Python; only SimCity 4 itself runs through Wine.
 
 The wrapper converts the launcher's `-UserDir:` path to a Windows path with `winepath` and starts the game with `wine`.
 
+Since v0.9 the launcher loads the SC4MP DLL (`sc4mp.dll`) into the game for the in-game chat and save status. The DLL connects to the launcher on the port in the `SC4MP_BRIDGE_PORT` environment variable, which the wrapper passes on to Wine. With `LAUNCH_MODE=steam` Steam starts the game itself, so the variable can't reach it: enable the legacy game monitor in the launcher's settings to use the status window instead.
+
 # Usage
 Follow the instructions included in the `Readme.html` file.
 

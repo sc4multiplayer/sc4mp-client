@@ -106,6 +106,11 @@ for arg in "$@"; do
 done
 
 if [[ "$LAUNCH_MODE" == "steam" ]]; then
+	if [[ -n "${SC4MP_BRIDGE_PORT:-}" ]]; then
+		# Steam starts the game from its own running instance, so our environment doesn't reach it
+		echo "simcity4-wine: WARNING: SC4MP_BRIDGE_PORT can't be passed through Steam, so the SC4MP DLL won't connect (no in-game chat or save status)." >&2
+		echo "simcity4-wine: Enable the legacy game monitor in the launcher's settings to use the status window instead." >&2
+	fi
 	echo "simcity4-wine: steam -applaunch 24780 ${args[*]}"
 	steam -applaunch 24780 "${args[@]}" >/dev/null 2>&1 &
 	# Steam hands the launch to its running instance and returns, so wait for

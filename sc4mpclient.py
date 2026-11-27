@@ -3412,6 +3412,9 @@ class GameMonitor(th.Thread):
 		# Cached md5's of savegames, by path, with the size and modification time they were computed for
 		self.city_hashcode_cache = {}
 
+		# Cached tile coordinates and sizes of savegames, by path, with the size and modification time they were read for
+		self.city_tiles_cache = {}
+
 		# The md5's of the savegames in the server's regions, by path
 		self.cities: dict[Path, str] = self.get_cities()
 
@@ -3747,15 +3750,10 @@ class GameMonitor(th.Thread):
 	def borders(self, path: Path, other_paths: list[Path]) -> bool:
 		"""Whether the savegame at `path` is next to any of the others (eg. the cities pushed last), since SC4 only rewrites the neighbours of the city it saves. `True` if it can't be told."""
 
-		def get_tiles(path):
-			with SC4Savegame(path, error_callback=None) as savegame:
-				city = savegame.get_SC4ReadRegionalCity()
-				return city["tileXLocation"], city["tileYLocation"], city["citySizeX"], city["citySizeY"]
-
 		try:
-			x, y, size_x, size_y = get_tiles(path)
+			x, y, size_x, size_y = self.get_city_tiles(path)
 			for other_path in other_paths:
-				other_x, other_y, other_size_x, other_size_y = get_tiles(other_path)
+				other_x, other_y, other_size_x, other_size_y = self.get_city_tiles(other_path)
 				# Touching along an edge or at a corner
 				if x <= other_x + other_size_x and other_x <= x + size_x and y <= other_y + other_size_y and other_y <= y + size_y:
 					return True
@@ -4325,13 +4323,17 @@ class GameMonitor(th.Thread):
 		city_paths = []
 		for city_path in region_path.glob('*.sc4'):
 			try:
-				with SC4Savegame(city_path, error_callback=None) as savegame:
-					SC4ReadRegionalCity = savegame.get_SC4ReadRegionalCity()
+				x, y, size_x, size_y = self.get_city_tiles(city_path)
 			except Exception as e:
 				show_error(e, no_ui=True)
 				continue
-			if (SC4ReadRegionalCity["tileXLocation"], SC4ReadRegionalCity["tileYLocation"]) == coords:
+			if (x, y) == coords:
 				city_paths.append(city_path)
+
+		# Forget the savegames that were renamed or deleted
+		for city_path in list(self.city_tiles_cache):
+			if city_path.parent == region_path and not city_path.exists():
+				self.city_tiles_cache.pop(city_path)
 
 		# Don't overwrite the player's changes that couldn't be pushed (eg. if the server was unreachable). They'll be replaced by the next refresh
 		for city_path in city_paths:
@@ -4444,6 +4446,21 @@ class GameMonitor(th.Thread):
 		if cached is None or cached[0] != key:
 			cached = (key, md5(city_path))
 			self.city_hashcode_cache[city_path] = cached
+		return cached[1]
+
+
+	def get_city_tiles(self, city_path: Path) -> tuple:
+		"""Returns the tile coordinates and size of a savegame (x, y, size x, size y)."""
+
+		# Only reread savegames that changed, since reading every savegame in a big region each time another mayor's save is downloaded takes a while
+		stat = city_path.stat()
+		key = (stat.st_size, stat.st_mtime_ns)
+		cached = self.city_tiles_cache.get(city_path)
+		if cached is None or cached[0] != key:
+			with SC4Savegame(city_path, error_callback=None) as savegame:
+				city = savegame.get_SC4ReadRegionalCity()
+			cached = (key, (city["tileXLocation"], city["tileYLocation"], city["citySizeX"], city["citySizeY"]))
+			self.city_tiles_cache[city_path] = cached
 		return cached[1]
 
 

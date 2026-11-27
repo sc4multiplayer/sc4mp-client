@@ -2748,9 +2748,6 @@ class ServerLoader(th.Thread):
 						if messagebox.askokcancel(title=SC4MP_TITLE, icon="error", message="SimCity 4 may not have launched correctly due to invalid settings.\n\nAdjust your settings in the SC4 settings menu before connecting to the server again.\n\nTIP: You can click the \"Preview\" button in the SC4 settings menu to test your settings without connecting to a server."):
 							SC4SettingsUI()
 
-				if game_monitor.ui and game_monitor.ui.winfo_exists() and game_monitor.ui.winfo_viewable():
-					game_monitor.ui.grab_set()
-
 				return
 
 			if sc4mp_ui:
@@ -9146,7 +9143,6 @@ class GameOverlayUI(tk.Toplevel):
 		try:
 			self.game_monitor_ui.deiconify()
 			self.game_monitor_ui.focus_set()
-			self.game_monitor_ui.grab_set()
 		except Exception as e:
 			show_error(e, no_ui=True)
 

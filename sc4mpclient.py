@@ -847,6 +847,21 @@ def get_sc4_path() -> Optional[Path]:
 	return None
 
 
+def query_sc4_launch_script(path: Path, option: str) -> Optional[str]:
+	"""Runs a SimCity 4 launch script (e.g. `linux/simcity4-wine.sh`) with a query `option` such as `--launch-mode`, and returns the last line it prints. Only if the script mentions the option, since an older script would pass it on to the game and start it."""
+
+	try:
+		if option.encode() not in path.read_bytes():
+			return None
+		output = subprocess.run([str(path.absolute()), option], capture_output=True, text=True, timeout=10).stdout.strip()
+		if output:
+			return output.splitlines()[-1].strip()
+	except Exception as e:
+		show_error(f"Unable to run \"{path}\" with \"{option}\".\n\n{e}", no_ui=True)
+
+	return None
+
+
 def get_sc4_installation_plugins_path() -> Optional[Path]:
 	"""Returns the `Plugins` folder of the SimCity 4 installation, which the game loads alongside the one in the launch path."""
 
@@ -860,14 +875,8 @@ def get_sc4_installation_plugins_path() -> Optional[Path]:
 		return path.parent.parent / "Plugins"
 
 	# Otherwise the path is a launch script (e.g. `linux/simcity4-wine.sh`), which knows where the game is installed
-	try:
-		output = subprocess.run([str(path.absolute()), "--plugins-dir"], capture_output=True, text=True, timeout=10).stdout.strip()
-		if output:
-			return Path(output.splitlines()[-1])
-	except Exception as e:
-		show_error(f"Unable to get the SimCity 4 installation plugins path from \"{path}\".\n\n{e}", no_ui=True)
-
-	return None
+	output = query_sc4_launch_script(path, "--plugins-dir")
+	return Path(output) if output else None
 
 
 def ask_sc4_path(parent) -> str:
@@ -1031,7 +1040,22 @@ def uses_steam_browser_protocol() -> bool:
 def uses_legacy_game_monitor() -> bool:
 	"""Whether the legacy game monitor is used instead of the SC4MP DLL: when the player chose it, or when the game is started through Steam, which can't pass the DLL the launcher's port."""
 
-	return sc4mp_config["GENERAL"]["legacy_game_monitor"] or uses_steam_browser_protocol()
+	return sc4mp_config["GENERAL"]["legacy_game_monitor"] or uses_steam_browser_protocol() or get_sc4_launch_mode() == "steam"
+
+
+def get_sc4_launch_mode() -> Optional[str]:
+	"""Returns how a launch script (e.g. `linux/simcity4-wine.sh`) starts the game, e.g. "wine" or "steam", or `None` if the SimCity 4 path isn't a launch script. In "steam" mode Steam starts the game from its own running instance, so the launcher's environment (and the SC4MP DLL's port) doesn't reach it."""
+
+	if is_windows():
+		return None
+
+	path = get_sc4_path()
+
+	if path is None or path.suffix.lower() == ".exe":
+		return None
+
+	output = query_sc4_launch_script(path, "--launch-mode")
+	return output.lower() if output else None
 
 
 def is_steam_sc4(path: Path):

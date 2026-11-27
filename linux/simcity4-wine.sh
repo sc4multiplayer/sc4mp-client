@@ -33,6 +33,8 @@
 #                   needed if it can't be worked out from SC4_EXE (e.g. steam
 #                   mode without SC4_EXE set).
 #
+# `simcity4-wine.sh --launch-mode` prints LAUNCH_MODE. In steam mode the launcher
+# uses its legacy game monitor, since the SC4MP DLL can't be passed its port.
 # `simcity4-wine.sh --plugins-dir` prints the installation's Plugins folder.
 # The launcher uses it to skip loading DLLs that are already installed there
 # (e.g. SC4Fix), since loading the same DLL twice can crash the game.
@@ -56,6 +58,11 @@ WINE="${WINE:-wine}"
 LAUNCH_MODE="${LAUNCH_MODE:-wine}"
 USE_GAMESCOPE="${USE_GAMESCOPE:-0}"
 GAMESCOPE_ARGS="${GAMESCOPE_ARGS:--f}"
+
+if [[ "${1:-}" == "--launch-mode" ]]; then
+	echo "$LAUNCH_MODE"
+	exit 0
+fi
 
 if [[ "${1:-}" == "--plugins-dir" ]]; then
 	dir="${SC4_PLUGINS_DIR:-}"
@@ -109,7 +116,7 @@ if [[ "$LAUNCH_MODE" == "steam" ]]; then
 	if [[ -n "${SC4MP_BRIDGE_PORT:-}" ]]; then
 		# Steam starts the game from its own running instance, so our environment doesn't reach it
 		echo "simcity4-wine: WARNING: SC4MP_BRIDGE_PORT can't be passed through Steam, so the SC4MP DLL won't connect (no in-game chat or save status)." >&2
-		echo "simcity4-wine: Enable the legacy game monitor in the launcher's settings to use the status window instead." >&2
+		echo "simcity4-wine: Update the launcher (it switches to the legacy game monitor in steam mode) or enable the legacy game monitor in its settings." >&2
 	fi
 	echo "simcity4-wine: steam -applaunch 24780 ${args[*]}"
 	steam -applaunch 24780 "${args[@]}" >/dev/null 2>&1 &

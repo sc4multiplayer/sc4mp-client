@@ -1510,7 +1510,9 @@ class Server:
 
 		# Turn server info that isn't text into text, since the server list expects it (eg. when filtering)
 		for key in ["server_id", "server_name", "server_description", "server_url", "server_version"]:
-			if not isinstance(server_info[key], str):
+			if server_info[key] is None:
+				server_info[key] = ""	# eg. `server_url = None`, so it isn't shown as a "None" link
+			elif not isinstance(server_info[key], str):
 				server_info[key] = str(server_info[key])
 
 		self.server_id = sanitize_directory_name(server_info["server_id"]) #self.request("server_id")

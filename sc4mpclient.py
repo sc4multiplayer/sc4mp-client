@@ -652,7 +652,7 @@ def update_config_constants(config):
 	global SC4MP_LAUNCHRESH
 	global SC4MP_CUSTOMPATH
 
-	SC4MP_LAUNCHPATH = config['STORAGE']['storage_path']
+	SC4MP_LAUNCHPATH = os.path.abspath(config['STORAGE']['storage_path'])	# absolute, since a relative path breaks joining it onto paths that already include it
 	SC4MP_LAUNCHRESW = config['SC4']['resw']
 	SC4MP_LAUNCHRESH = config['SC4']['resh']
 	SC4MP_CUSTOMPATH = config['SC4']['game_path']

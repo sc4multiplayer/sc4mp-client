@@ -4128,7 +4128,7 @@ class GameMonitor(th.Thread):
 
 		# Not the recent messages sent when joining, which would fill the log
 		if not event.get('history'):
-			print(f"[CHAT] {name}: {message}")
+			print(f"<{name}> {message}")
 
 		if isinstance(self.ui, GameMonitorUI):
 			self.ui.add_chat_message(name, message, timestamp, user_id, text(event.get('city')) or None, own=self.is_own(user_id))
@@ -4967,8 +4967,6 @@ class GameBridge(th.Thread):
 
 		if not message:
 			return
-
-		print("- sending a chat message from the game")
 
 		def send():
 			try:

@@ -291,7 +291,10 @@ def main():
 					sc4mp_ui = UI()
 				server = Server(sc4mp_host, sc4mp_port)
 				server.password = sc4mp_password
-				ServerLoaderUI(server)
+				if url_launch:
+					sc4mp_ui.after(0, lambda: connect_link_server(server))	# once the splash screen is closed
+				else:
+					ServerLoaderUI(server)
 			else:
 				sc4mp_ui = UI()
 			close_splash()
@@ -1410,6 +1413,24 @@ def close_splash():
 		pyi_splash.close()
 	except ImportError:
 		pass
+
+
+def connect_link_server(server):
+	"""Joins the server of an sc4mp:// link, after the same third-party server warning as the server list."""
+
+	# Servers the player joined before, at this address, count as History, as in the server list
+	history = False
+	for entry in sc4mp_servers_database.values():
+		if entry.get("host") == server.host and entry.get("port") == server.port and "user_id" in entry.keys():
+			history = True
+
+	if not ("Official" in server.categories or history or sc4mp_config["GENERAL"]["ignore_third_party_server_warnings"]):
+		if not messagebox.askokcancel(title=SC4MP_TITLE, message="You are about to join a third-party server.\n\nThe SimCity 4 Multiplayer Project is not responsible for content downloaded from third-party servers. Only join third-party servers you trust.", icon="warning"):
+			if sc4mp_exit_after:
+				sc4mp_ui.destroy()
+			return
+
+	ServerLoaderUI(server)
 
 
 def window_open(image_name):

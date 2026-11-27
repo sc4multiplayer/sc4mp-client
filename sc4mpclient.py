@@ -40,7 +40,7 @@ except ImportError:
 from core.config import Config
 from core.database import Database
 from core.dbpf import SC4Savegame, SC4Config
-from core.networking import ClientSocket, NetworkException, RefusedException
+from core.networking import ClientSocket, NetworkException, RefusedException, COMMAND_LOADING_BACKGROUND
 from core.util import *
 
 
@@ -73,6 +73,10 @@ SC4MP_HOST = "localhost" #SC4MP_SERVERS[0][0]
 SC4MP_PORT = 7240 #SC4MP_SERVERS[0][1]
 
 SC4MP_BUFFER_SIZE = 4096
+
+SC4MP_SERVER_LIST_MAX_FILE_SIZE = 5 * 1024 * 1024	# region.json or config.bmp files bigger than this aren't fetched for the server list stats
+SC4MP_SERVER_LIST_MAX_DOWNLOAD = 20 * 1024 * 1024	# the most fetched from one server for the server list stats
+SC4MP_MAX_BACKGROUND_SIZE = 20 * 1024 * 1024	# loading backgrounds bigger than this aren't shown
 
 SC4MP_DELAY = .1
 
@@ -1504,6 +1508,11 @@ class Server:
 		#else:
 		#	raise ClientException("Unable to find server. Check the IP address and port, then try again.")
 
+		# Turn server info that isn't text into text, since the server list expects it (eg. when filtering)
+		for key in ["server_id", "server_name", "server_description", "server_url", "server_version"]:
+			if not isinstance(server_info[key], str):
+				server_info[key] = str(server_info[key])
+
 		self.server_id = sanitize_directory_name(server_info["server_id"]) #self.request("server_id")
 		self.server_name = server_info["server_name"] #self.request("server_name")
 		self.server_description = server_info["server_description"] #self.request("server_description")
@@ -1632,12 +1641,19 @@ class Server:
 				if not entry[0] in cache_files:
 					download_size += entry[1]
 
-			# Prune file table as necessary
+			# Prune file table as necessary (only the region files the stats need, and not too much of them)
 			ft = []
+			ft_size = 0
 			for entry in file_table:
-				filename = Path(entry[2]).name
-				if filename in ["region.json", "config.bmp"]:
-					ft.append(entry)
+				if type_ != "regions" or not isinstance(entry[1], int) or not isinstance(entry[2], str):
+					continue
+				parts = entry[2].replace("\\", "/").split("/")
+				if parts[1:] not in [["config.bmp"], ["_Database", "region.json"]]:
+					continue
+				if entry[1] > SC4MP_SERVER_LIST_MAX_FILE_SIZE or ft_size + entry[1] > SC4MP_SERVER_LIST_MAX_DOWNLOAD:
+					continue
+				ft.append(entry)
+				ft_size += entry[1]
 			file_table = ft
 
 			# Receive files
@@ -7244,8 +7260,13 @@ class ServerBackgroundUI(tk.Toplevel):
 				os.unlink(destination)
 
 			with self.server.socket() as s:
+				# Not `s.loading_background()`, which reads whatever size the server says
+				size = s.request(COMMAND_LOADING_BACKGROUND).get("size")
+				if not isinstance(size, int) or size > SC4MP_MAX_BACKGROUND_SIZE:
+					print("[WARNING] The server's loading background is too big.")
+					return
 				with open(destination, "wb") as file:
-					file.write(s.loading_background())
+					file.write(s.recv_exact(size))
 
 			if destination.stat().st_size > 0:
 

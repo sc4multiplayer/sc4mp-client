@@ -31,3 +31,5 @@ profile.json
 *.ini
 
 !resources/4gb-patch.exe
+linux/simcity4-wine.conf
+

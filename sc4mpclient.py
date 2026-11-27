@@ -652,7 +652,7 @@ def update_config_constants(config):
 	global SC4MP_LAUNCHRESH
 	global SC4MP_CUSTOMPATH
 
-	SC4MP_LAUNCHPATH = config['STORAGE']['storage_path']
+	SC4MP_LAUNCHPATH = Path(config['STORAGE']['storage_path']).absolute()	# absolute, so a relative storage path (e.g. "_SC4MP") means the same folder everywhere, including to the game, which runs from its own folder
 	SC4MP_LAUNCHRESW = config['SC4']['resw']
 	SC4MP_LAUNCHRESH = config['SC4']['resh']
 	SC4MP_CUSTOMPATH = config['SC4']['game_path']
@@ -847,6 +847,47 @@ def get_sc4_path() -> Optional[Path]:
 	return None
 
 
+def query_sc4_launch_script(path: Path, option: str) -> Optional[str]:
+	"""Runs a SimCity 4 launch script (e.g. `linux/simcity4-wine.sh`) with a query `option` such as `--launch-mode`, and returns the last line it prints. Only if the script mentions the option, since an older script would pass it on to the game and start it."""
+
+	try:
+		if option.encode() not in path.read_bytes():
+			return None
+		output = subprocess.run([str(path.absolute()), option], capture_output=True, text=True, timeout=10).stdout.strip()
+		if output:
+			return output.splitlines()[-1].strip()
+	except Exception as e:
+		show_error(f"Unable to run \"{path}\" with \"{option}\".\n\n{e}", no_ui=True)
+
+	return None
+
+
+def get_sc4_installation_plugins_path() -> Optional[Path]:
+	"""Returns the `Plugins` folder of the SimCity 4 installation, which the game loads alongside the one in the launch path."""
+
+	path = get_sc4_path()
+
+	if path is None:
+		return None
+
+	# The usual case: the path is the game exe, in "<installation>/Apps"
+	if is_windows() or path.suffix.lower() == ".exe":
+		return path.parent.parent / "Plugins"
+
+	# Otherwise the path is a launch script (e.g. `linux/simcity4-wine.sh`), which knows where the game is installed
+	output = query_sc4_launch_script(path, "--plugins-dir")
+	return Path(output) if output else None
+
+
+def ask_sc4_path(parent) -> str:
+	"""Prompts for the SimCity 4 path. On Windows this is the installation folder; elsewhere it is the launch script (e.g. a Wine wrapper) that gets run directly."""
+
+	if is_windows():
+		return filedialog.askdirectory(parent=parent)
+	else:
+		return filedialog.askopenfilename(parent=parent, title="Select the SimCity 4 launch script (e.g. linux/simcity4-wine.sh)")
+
+
 def start_sc4(bridge_port=None):
 	"""Attempts to find the install path of SimCity 4 and launches the game with custom launch parameters if found. `bridge_port` is passed to the SC4MP DLL, so it can connect to the game monitor (see `GameBridge`)."""
 
@@ -887,7 +928,7 @@ def start_sc4(bridge_port=None):
 
 	# Arguments set based on config settings
 	arguments = [str(path.absolute()),  # absolute, since the game is started from its own folder
-			  f'-UserDir:"{SC4MP_LAUNCHPATH}{os.sep}"', # add trailing slash here because SC4 expects it
+			  f'-UserDir:"{Path(SC4MP_LAUNCHPATH).absolute()}{os.sep}"', # absolute, since the game is started from its own folder; add trailing slash here because SC4 expects it
 			  '-intro:off',
 			  '-CustomResolution:enabled',
 			  f'-r{resw}x{resh}x32',
@@ -999,7 +1040,22 @@ def uses_steam_browser_protocol() -> bool:
 def uses_legacy_game_monitor() -> bool:
 	"""Whether the legacy game monitor is used instead of the SC4MP DLL: when the player chose it, or when the game is started through Steam, which can't pass the DLL the launcher's port."""
 
-	return sc4mp_config["GENERAL"]["legacy_game_monitor"] or uses_steam_browser_protocol()
+	return sc4mp_config["GENERAL"]["legacy_game_monitor"] or uses_steam_browser_protocol() or get_sc4_launch_mode() == "steam"
+
+
+def get_sc4_launch_mode() -> Optional[str]:
+	"""Returns how a launch script (e.g. `linux/simcity4-wine.sh`) starts the game, e.g. "wine" or "steam", or `None` if the SimCity 4 path isn't a launch script. In "steam" mode Steam starts the game from its own running instance, so the launcher's environment (and the SC4MP DLL's port) doesn't reach it."""
+
+	if is_windows():
+		return None
+
+	path = get_sc4_path()
+
+	if path is None or path.suffix.lower() == ".exe":
+		return None
+
+	output = query_sc4_launch_script(path, "--launch-mode")
+	return output.lower() if output else None
 
 
 def is_steam_sc4(path: Path):
@@ -2626,7 +2682,7 @@ class ServerLoader(th.Thread):
 						else:
 							sc4mp_ui.deiconify()
 						return
-					path = filedialog.askdirectory(parent=self.ui)
+					path = ask_sc4_path(self.ui)
 					if len(path) > 0:
 						sc4mp_config["SC4"]["game_path"] = path
 						if sc4mp_config["SC4"]["use_steam_browser_protocol"] in [0, 1]:
@@ -3213,8 +3269,8 @@ class ServerLoader(th.Thread):
 		# Get checksums of plugins installed to the top-level of the program files plugins folder (to avoid dobule-loading DLLs)
 		toplevel_plugins_checksums = []
 		try:
-			installation_plugins_path = get_sc4_path().parent.parent / "Plugins"
-			for file_name in os.listdir(installation_plugins_path):
+			installation_plugins_path = get_sc4_installation_plugins_path()
+			for file_name in (os.listdir(installation_plugins_path) if installation_plugins_path and installation_plugins_path.is_dir() else []):
 				file_path = installation_plugins_path / file_name
 				if file_path.is_file():
 					toplevel_plugins_checksums.append(md5(file_path))
@@ -4420,9 +4476,8 @@ class GameMonitor(th.Thread):
 		"""Returns the md5's of the savegames in the server's regions, by path."""
 
 		cities = {}
-		regions_path = Path(SC4MP_LAUNCHPATH) / "Regions"
 		for region in self.server.regions:
-			region_path: Path = regions_path / region
+			region_path: Path = region	# already the full path to the region, see `ServerLoader.prep_regions`
 			region_path.mkdir(parents=True, exist_ok=True)
 			if region_path.is_file(): # is this necessary?
 				continue
@@ -6067,7 +6122,7 @@ class SC4SettingsUI(tk.Toplevel):
 		self.path_frame.button.grid(row=0, column=1, columnspan=1, padx=10, pady=10)
 
 		# Path label
-		self.path_frame.label = ttk.Label(self.path_frame, text='If the launcher fails to find SimCity 4 installed on your computer, \nspecify the path to the game installation here.')
+		self.path_frame.label = ttk.Label(self.path_frame, text=('If the launcher fails to find SimCity 4 installed on your computer, \nspecify the path to the game installation here.' if is_windows() else 'Specify the path to your SimCity 4 launch script here \n(e.g. linux/simcity4-wine.sh, which runs the game through Wine).'))
 		self.path_frame.label.grid(row=1, column=0, columnspan=2, padx=10, pady=(0,10))
 
 		# Resolution frame
@@ -6159,7 +6214,7 @@ class SC4SettingsUI(tk.Toplevel):
 
 	def browse_path(self):
 
-		path = filedialog.askdirectory(parent=self)
+		path = ask_sc4_path(self)
 		if len(path) > 0:
 			self.path_frame.entry.delete(0, 'end')
 			self.path_frame.entry.insert(0, path)
@@ -6224,7 +6279,7 @@ class SC4SettingsUI(tk.Toplevel):
 			# Check if a path to SimCity 4 can be found, prompt for a custom path if needed
 			while get_sc4_path() == None:
 				show_warning('No SimCity 4 installation found. \n\nPlease provide the correct installation path.')
-				path = filedialog.askdirectory(parent=sc4mp_ui)
+				path = ask_sc4_path(sc4mp_ui)
 				if len(path) > 0:
 					sc4mp_config["SC4"]["game_path"] = path
 					self.path_frame.entry.delete(0, 'end')
@@ -7178,8 +7233,11 @@ class ServerBackgroundUI(tk.Toplevel):
 		self.title(SC4MP_TITLE)
 
 		# Geometry
-		self.state('zoomed')
-		self.wm_attributes("-toolwindow", True)
+		if is_windows():
+			self.state('zoomed')
+			self.wm_attributes("-toolwindow", True)
+		else:
+			self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")	# "zoomed" and "-toolwindow" don't exist on X11
 		self.attributes("-fullscreen", sc4mp_config["SC4"]["fullscreen"])
 
 		# Load the image

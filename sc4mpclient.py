@@ -9144,6 +9144,7 @@ class GameOverlayUI(tk.Toplevel):
 
 		# Init
 		super().__init__()
+		self.withdraw()	# until `overlay` has made it borderless, since on Linux (X11) that only applies to a window that isn't shown yet
 
 		# Geometry
 		self.overlay()
@@ -9223,6 +9224,7 @@ class GameOverlayUI(tk.Toplevel):
 				return	# the player can already see it
 
 			popup = tk.Toplevel(self)
+			popup.withdraw()	# until it's borderless and in place (see `__init__`)
 			popup.overrideredirect(True)
 			popup.wm_attributes("-topmost", True)
 
@@ -9234,6 +9236,7 @@ class GameOverlayUI(tk.Toplevel):
 			width = popup.winfo_reqwidth()
 			height = popup.winfo_reqheight()
 			popup.geometry(f"{width}x{height}+{self.winfo_screenwidth() - width}+{self.winfo_screenheight() - 20 - height}")
+			popup.deiconify()
 
 			popup.after(duration, popup.destroy)
 

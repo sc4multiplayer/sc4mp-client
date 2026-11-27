@@ -1521,7 +1521,8 @@ class Server:
 		except KeyError:
 			pass
 
-		if self.server_id in sc4mp_servers_database.keys():
+		# Any server can report any server ID, so only use the saved password at the address it was saved for
+		if self.server_id in sc4mp_servers_database.keys() and self.is_saved_address():
 			self.password = sc4mp_servers_database[self.server_id].get("password", None) # Needed for stat fetching private servers
 
 		if self.password_enabled:
@@ -1673,6 +1674,11 @@ class Server:
 		# Get database entry for server
 		key = self.server_id
 		entry = sc4mp_servers_database.get(key, dict())
+
+		# Leave a saved entry alone (address, name, History) if this server reports its server ID from another address
+		if key in sc4mp_servers_database.keys() and not self.is_saved_address():
+			return
+
 		sc4mp_servers_database[key] = entry
 
 		# Set server categories
@@ -1682,7 +1688,9 @@ class Server:
 			self.categories.append("Bookmarked")
 
 		# Set values in database entry
+		host = entry.get("host", self.host)
 		set_server_data(entry, self)
+		entry["host"] = host	# keeps the saved hostname when the server is reached by its IP address
 
 
 	def authenticate(self):
@@ -1741,6 +1749,32 @@ class Server:
 		entry["token"] = token
 		entry.setdefault("first_logon", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 		entry["last_logon"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+		# Joining the server at another address moves its saved entry there, with only the password the player typed there
+		if not self.is_saved_address():
+			entry.pop("password", None)
+			if sc4mp_config["GENERAL"]["save_server_passwords"] and self.password is not None:
+				entry["password"] = self.password
+			set_server_data(entry, self)
+
+
+	def is_saved_address(self):
+		"""Whether the server was reached at the address its saved entry was saved for."""
+
+		entry = sc4mp_servers_database.get(self.server_id, dict())
+
+		host = entry.get("host", None)
+		if host is None or entry.get("port", None) != self.port:
+			return False
+		if host == self.host:
+			return True
+
+		# The same server reached by the IP address its saved hostname points to (eg. servers.sc4mp.org)
+		try:
+			socket.inet_aton(self.host)
+			return self.host in socket.gethostbyname_ex(host)[2]
+		except Exception:
+			return False
 
 
 	def ping(self):
@@ -2845,18 +2879,21 @@ class ServerLoader(th.Thread):
 
 		if self.server.password_enabled:
 			if self.server.password is None:
-				if sc4mp_config["GENERAL"]["save_server_passwords"]:
+				if sc4mp_config["GENERAL"]["save_server_passwords"] and self.server.is_saved_address():
 					try:
 						self.server.password = sc4mp_servers_database[self.server.server_id]["password"]
 					except Exception:
 						return False
+				else:
+					return False
 			if self.server.password == "":
 				return True
 			if self.ui is not None:
 				self.ui.label['text'] = "Authenticating..."
 			with self.server.socket() as s:
 				if s.check_password(password=self.server.password):
-					if sc4mp_config["GENERAL"]["save_server_passwords"]:
+					# At another address, the password is saved once the player joins (see `Server.authenticate`)
+					if sc4mp_config["GENERAL"]["save_server_passwords"] and self.server.is_saved_address():
 						try:
 							sc4mp_servers_database[self.server.server_id]["password"] = self.server.password
 						except Exception as e:

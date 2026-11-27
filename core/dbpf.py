@@ -7,6 +7,8 @@ class DBPF:
 
 
 	MAX_DECOMPRESSED_SIZE = 4_000_000	# bytes. The subfiles read here are a few KB, so more means the file is broken or malicious
+	MAX_COMPRESSED_SIZE = 500_000	# bytes. The compressed subfiles read here are at most a few KB, and every byte takes a loop to decompress
+	MAX_INDEX_COUNT = 10_000	# Savegames have a few hundred subfiles, and every one takes a dictionary
 
 
 	def __init__(self, filename, offset=0, error_callback=None, require_identifier=True):
@@ -50,6 +52,17 @@ class DBPF:
 		self.reserved2 = self.file.read(32)
 		self.header_end = self.file.tell()
 
+		# Refuse an index that doesn't fit in the file or is too big, so a broken or malicious file can't make us read millions of entries
+		self.file.seek(0, io.SEEK_END)
+		self.file_size = self.file.tell()
+		if (self.indexMajorVersion == 7) and (self.indexMinorVersion == 1):
+			index_entry_size = 24
+		else:
+			index_entry_size = 20
+		if self.indexCount > self.MAX_INDEX_COUNT or self.indexCount * index_entry_size > self.indexSize or offset + self.indexOffset + self.indexSize > self.file_size:
+			self.file.close()
+			raise ValueError(f"The index of \"{self.filename}\" is too big or doesn't fit in the file.")
+
 		# Seek to index table
 		self.file.seek(offset + self.indexOffset)
 
@@ -64,6 +77,9 @@ class DBPF:
 				self.indexData[index]['instanceID2'] = self.read_ID()
 			self.indexData[index]['offset'] = self.read_UL4()
 			self.indexData[index]['filesize'] = self.read_UL4()
+			# A subfile can't go past the end of the file
+			if self.indexData[index]['offset'] + self.indexData[index]['filesize'] > self.file_size:
+				self.indexData[index]['filesize'] = max(self.file_size - self.indexData[index]['offset'], 0)
 			#self.indexData[index]['compressed'] = #TODO
 			#self.indexData[index]['truesize'] = #TODO
 
@@ -94,6 +110,11 @@ class DBPF:
 		numplain = ""		# TODO what does this do?
 		numcopy = ""		# TODO what does this do?
 		offset = ""			# TODO what does this do?
+
+		# Only read what's left of the file, and not more than the subfiles read here can have
+		length = min(length, self.file_size - self.file.tell())
+		if length > self.MAX_COMPRESSED_SIZE:
+			raise ValueError(f"\"{self.filename}\" has a compressed subfile of more than {self.MAX_COMPRESSED_SIZE} bytes.")
 
 		try:
 
